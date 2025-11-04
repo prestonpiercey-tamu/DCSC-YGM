@@ -4,3 +4,4 @@
 # SPDX-License-Identifier: MIT
 
 add_ygm_executable(read_json_example)
+add_ygm_executable(run_dcsc)
