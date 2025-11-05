@@ -47,16 +47,21 @@ int main(int argc, char **argv)
     size_t iter = 0;
     size_t unterminated = 1;
 
+    world.stats_reset();
+
     while(unterminated) {
         trim_trivial(world, result);
         init_wcc_pivots(world, result, iter, min_vtx, max_vtx);
         prop_pivots(world, result);
+        shear_edges(world, result);
         freeze_scc_reset_reached(world, result);
         unterminated = detect_termination(world, result);
 
         world.cout0() << "Iteration " << iter++ << " left " << unterminated << " unterminated." << std::endl;
     }
     world.barrier();
+
+    world.stats_print();
 
     uint32_t scc_count = count_sccs(world, result);
     uint32_t largest_scc = count_largest_scc(world, result);

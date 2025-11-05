@@ -48,27 +48,35 @@ inline void freeze_scc_reset_reached(ygm::comm &world, ygm::container::map<uint3
     world.barrier();
 }
 
-// inline void shear_edges(ygm::comm &world, ygm::container::map<uint32_t, VtxInfo>& vertex_map){
+inline void shear_edges(ygm::comm &world, ygm::container::map<uint32_t, VtxInfo>& vertex_map){
 
-//     static auto p_vertex_map = &vertex_map;
-//     vertex_map.local_for_all([&vertex_map](const uint32_t& vtx, VtxInfo& info){
+    static auto p_vertex_map = &vertex_map;
+    vertex_map.local_for_all([&vertex_map](const uint32_t& vtx, VtxInfo& info){
 
-//         if (!info.active) {
-//             return;
-//         }
+        if (!info.active) {
+            return;
+        }
 
-//         auto check_and_remove = [] (const uint32_t& vtx, VtxInfo& info, uint32_t sender, ) {
-//             if ()
+        auto check_and_remove_in = [] (const uint32_t& vtx, VtxInfo& info, uint32_t sender, bool s_pred, bool s_desc) {
 
-//         }
+            auto remove_out = [] (uint32_t, VtxInfo& info, uint64_t edge) {
+                info.out.erase(edge);
+            };
 
+            if (info.mark_pred != s_pred || info.mark_desc != s_desc) {
+                info.in.erase(sender);
+                p_vertex_map->async_visit(sender, remove_out, vtx);
+            }
+
+        };
+
+        for (auto nbr : info.out) {
+            p_vertex_map->async_visit(nbr, check_and_remove_in, vtx, info.mark_pred, info.mark_desc);
+        }
+    });
     
-
-//         for (auto nbr : info.out) {
-//             p_vertex_map->async_visit(nbr, check_and_remove, vtx, info.mark_pred, info.mark_desc);
-//         }
-//     });
-// }
+    world.barrier();
+}
 
 
 inline void prop_pivots(ygm::comm &world, ygm::container::map<uint32_t, VtxInfo>& vertex_map) {
