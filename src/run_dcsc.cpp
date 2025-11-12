@@ -50,15 +50,20 @@ int main(int argc, char **argv)
     world.stats_reset();
 
     while(unterminated) {
+        //world.cout0() << "hung @ trim-trivial" << std::endl;
         trim_trivial(world, result);
+        world.cout0() << "hung @ init pivots" << std::endl;
         init_wcc_pivots(world, result, iter, min_vtx, max_vtx);
+        world.cout0() << "hung @ prop pivots" << std::endl;
         prop_pivots(world, result);
+        world.cout0() << "hung @ shear edges" << std::endl;
         shear_edges(world, result);
-        freeze_scc_reset_reached(world, result);
-        unterminated = detect_termination(world, result);
+        world.cout0() << "hung @ detect-term" << std::endl;
+        unterminated = prep_unterminated(world, result);
 
         world.cout0() << "Iteration " << iter++ << " left " << unterminated << " unterminated." << std::endl;
     }
+    
     world.barrier();
 
     world.stats_print();
