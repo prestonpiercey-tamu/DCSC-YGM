@@ -14,14 +14,13 @@ int main(int argc, char **argv)
         return 1;
     }
 
+
     std::string edgelist_file = argv[1];
-    
     ygm::container::map<uint32_t, VtxInfo> result(world);
-
     create_vertex_map(world, edgelist_file, result);
-
-
     world.barrier();
+
+
     uint32_t max_vtx = 0;
     uint32_t min_vtx = -1;
 
@@ -42,25 +41,22 @@ int main(int argc, char **argv)
 
     world.cout0() << "Starting DCSC" << std::endl;
 
-    bool found_all_scc = false;
-
     size_t iter = 0;
     size_t unterminated = 1;
 
     world.stats_reset();
 
     while(unterminated) {
-        //world.cout0() << "hung @ trim-trivial" << std::endl;
+        world.cout0() << "Stopped @ trim-trivial" << std::endl;
         trim_trivial(world, result);
-        world.cout0() << "hung @ init pivots" << std::endl;
+        world.cout0() << "Stopped @ init pivots" << std::endl;
         init_wcc_pivots(world, result, iter, min_vtx, max_vtx);
-        world.cout0() << "hung @ prop pivots" << std::endl;
+        world.cout0() << "Stopped @ prop pivots" << std::endl;
         prop_pivots(world, result);
-        world.cout0() << "hung @ shear edges" << std::endl;
+        world.cout0() << "Stopped @ shear edges" << std::endl;
         shear_edges(world, result);
-        world.cout0() << "hung @ detect-term" << std::endl;
+        world.cout0() << "Stopped @ detect-term" << std::endl;
         unterminated = prep_unterminated(world, result);
-
         world.cout0() << "Iteration " << iter++ << " left " << unterminated << " unterminated." << std::endl;
     }
     

@@ -7,7 +7,7 @@
 #include "graph_util.hpp"
 #include "fpp_vertex_permuter.hpp"
 
-inline size_t prep_unterminated(ygm::comm &world, ygm::container::map<uint32_t, VtxInfo>& vertex_map) {
+inline size_t prep_unterminated (ygm::comm &world, ygm::container::map<uint32_t, VtxInfo>& vertex_map) {
     size_t num_unterminated = 0;
 
     vertex_map.for_all([&num_unterminated](const uint32_t& vtx, VtxInfo& info){
@@ -40,7 +40,9 @@ inline size_t prep_unterminated(ygm::comm &world, ygm::container::map<uint32_t, 
 inline void shear_edges (ygm::comm &world, ygm::container::map<uint32_t, VtxInfo>& vertex_map) {
 
     static auto p_vertex_map = &vertex_map;
-    vertex_map.local_for_all([&vertex_map](const uint32_t& vtx, VtxInfo& info){
+    size_t num_unterminated = 0; 
+
+    vertex_map.local_for_all([&vertex_map, &num_unterminated](const uint32_t& vtx, VtxInfo& info){
 
         if (!info.active) {
             return;
