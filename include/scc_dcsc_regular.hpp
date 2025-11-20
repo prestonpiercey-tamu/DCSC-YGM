@@ -151,30 +151,10 @@ inline void init_wcc_pivots (ygm::comm &world, ygm::container::map<uint32_t, Vtx
 
     world.barrier();
 
+    static std::vector<uint32_t> cur_prop_list;
+    static std::vector<uint32_t> next_prop_list;
 
-    // settle on smallest pivot
-    struct share_pivot {
-        void operator()(const uint32_t& vtx, VtxInfo& info, uint32_t pivot){
-            if (!info.active) {
-                return;
-            }
-
-            if (pivot < info.wcc_pivot) {
-                info.wcc_pivot = pivot; 
-
-                for (auto desc : info.out) {
-                    p_vertex_map->async_visit(desc, share_pivot(), pivot);
-                }
-
-                for (auto actr : info.in) {
-                    p_vertex_map->async_visit(actr, share_pivot(), pivot);
-                }
-
-            }
-        }
-    };
-
-    vertex_map.local_for_all([&](uint32_t vtx, VtxInfo& info){
+    vertex_map.local_for_all([&perm](uint32_t vtx, VtxInfo& info){
         if (!info.active) {
             return;
         }
@@ -193,14 +173,54 @@ inline void init_wcc_pivots (ygm::comm &world, ygm::container::map<uint32_t, Vtx
             }
         }
 
-        for (auto desc : info.out) {
-            p_vertex_map->async_visit(desc, share_pivot(), info.wcc_pivot);
+        cur_prop_list.push_back(vtx);
+    });
+    world.barrier();
+
+    world.cout0() << "Stopped before propagation_start" << std::endl;
+
+    static size_t total_visits_next_iter;
+    total_visits_next_iter = 1;
+
+    while (total_visits_next_iter != 0) {
+
+        for (auto vtx : cur_prop_list) {
+            vertex_map.local_visit(vtx, [](uint32_t vtx, VtxInfo& info){
+
+                auto pivot_carrier = [](uint32_t vtx, VtxInfo& info, uint32_t pivot){
+                    if (!info.active) {
+                        return;
+                    }
+
+                    if (pivot < info.wcc_pivot) {
+                        info.wcc_pivot = pivot;
+                        next_prop_list.push_back(vtx);
+                    }
+                };
+
+                for (auto desc : info.out) {
+                    p_vertex_map->async_visit(desc, pivot_carrier, info.wcc_pivot);
+                }
+
+                for (auto actr : info.in) {
+                    p_vertex_map->async_visit(actr, pivot_carrier, info.wcc_pivot);
+                }
+            });
         }
 
-        for (auto actr : info.in) {
-            p_vertex_map->async_visit(actr, share_pivot(), info.wcc_pivot);
-        }
-    });
+        world.barrier();
+        total_visits_next_iter = ygm::sum(next_prop_list.size(), world);
+
+        world.cout0() << total_visits_next_iter << ", ";
+
+        cur_prop_list.clear();
+        cur_prop_list.swap(next_prop_list);
+    }
+
+    cur_prop_list.clear();
+    next_prop_list.clear();
+
+    world.cout0() << std::endl;
 
     world.barrier();
 }

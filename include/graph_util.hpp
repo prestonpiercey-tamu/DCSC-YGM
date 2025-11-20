@@ -30,6 +30,8 @@ inline void create_vertex_map(ygm::comm &world, const std::string& edgelist_file
         std::cout << "Reading edges from " << edgelist_file << std::endl;
     }
 
+    static uint64_t edge_count = 0;
+
     ygm::io::line_parser lp(world, {edgelist_file});
     lp.for_all([&vertex_map](const std::string& line) {
         if (line.empty() || line[0] == '#') {
@@ -37,7 +39,7 @@ inline void create_vertex_map(ygm::comm &world, const std::string& edgelist_file
         }
 
         std::istringstream iss(line);
-
+        
         uint32_t src, dst;
 
         if (iss >> src >> dst) {
@@ -46,18 +48,27 @@ inline void create_vertex_map(ygm::comm &world, const std::string& edgelist_file
 
             auto add_fwd_edge = [](const uint32_t& src, VtxInfo& info, const uint32_t dst){
                 info.out.insert(dst);
+                edge_count++;
             };
 
             auto add_reverse_edge = [](const uint32_t& dst, VtxInfo& info, const uint32_t src){
                 info.in.insert(src);
+                edge_count++;
             };
 
-            // vertex_map.async_insert(src, VertexInfo{src});
-            // vertex_map.async_insert(dst, VertexInfo{dst});
             vertex_map.async_visit(src, add_fwd_edge, dst);
             vertex_map.async_visit(dst, add_reverse_edge, src);
         }
     });
+
+    uint64_t local_edge_count = edge_count;
+
+    world.cout() << local_edge_count << ", " << std::endl;
+
+    edge_count = ygm::sum(edge_count, world);
+
+    world.cout0() << "\nNode Count: " << vertex_map.size() << std::endl;
+    world.cout0() << "Edge Count: " << edge_count << std::endl;
 
     world.barrier();
 }
