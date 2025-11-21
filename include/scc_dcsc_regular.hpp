@@ -3,6 +3,8 @@
 #include <ygm/comm.hpp>
 #include <ygm/container/map.hpp>
 #include <ygm/detail/collective.hpp>
+#include <queue>
+#include <functional>
 
 #include "graph_util.hpp"
 #include "fpp_vertex_permuter.hpp"
@@ -150,9 +152,52 @@ inline void init_wcc_pivots (ygm::comm &world, ygm::container::map<uint32_t, Vtx
     });
 
     world.barrier();
+    
+    world.cout0() << "Stopped before propagation_start" << std::endl;
+    static auto p_world = &world;
 
-    static std::vector<uint32_t> cur_prop_list;
-    static std::vector<uint32_t> next_prop_list;
+    static std::priority_queue<std::pair<uint32_t, uint32_t>, std::vector<std::pair<uint32_t, uint32_t>>, std::greater<std::pair<uint32_t, uint32_t>>> workqueue;
+
+    struct pop_front_and_send {
+        void operator() () {
+
+            if (!workqueue.empty()){
+
+                std::pair<uint32_t, uint32_t> front = workqueue.top();
+                workqueue.pop();
+
+                p_vertex_map->local_visit(front.second, [](uint32_t vtx, VtxInfo& info, uint32_t queued_pivot){
+                    if (queued_pivot != info.wcc_pivot) {
+                        return;
+                    }
+
+
+                    auto recv_and_enqueue = [] (uint32_t vtx, VtxInfo& info, uint32_t pivot) {
+                        if (!info.active) {
+                            return;
+                        }
+
+                        if (pivot < info.wcc_pivot) {
+                            info.wcc_pivot = pivot;
+                            workqueue.push({pivot, vtx});
+
+                            p_world->register_pre_barrier_callback(pop_front_and_send());
+                        }
+                    };
+                
+
+                    for (auto desc : info.out) {
+                        p_vertex_map->async_visit(desc, recv_and_enqueue, info.wcc_pivot);
+                    }
+
+                    for (auto actr : info.in) {
+                        p_vertex_map->async_visit(actr, recv_and_enqueue, info.wcc_pivot);
+                    }
+
+                }, front.first);
+            }
+        }
+    };
 
     vertex_map.local_for_all([&perm](uint32_t vtx, VtxInfo& info){
         if (!info.active) {
@@ -173,56 +218,13 @@ inline void init_wcc_pivots (ygm::comm &world, ygm::container::map<uint32_t, Vtx
             }
         }
 
-        cur_prop_list.push_back(vtx);
+        workqueue.push({info.my_pivot, vtx});
+        p_world->register_pre_barrier_callback(pop_front_and_send());
     });
-    world.barrier();
-
-    world.cout0() << "Stopped before propagation_start" << std::endl;
-
-    static size_t total_visits_next_iter;
-    total_visits_next_iter = 1;
-
-    while (total_visits_next_iter != 0) {
-
-        for (auto vtx : cur_prop_list) {
-            vertex_map.local_visit(vtx, [](uint32_t vtx, VtxInfo& info){
-
-                auto pivot_carrier = [](uint32_t vtx, VtxInfo& info, uint32_t pivot){
-                    if (!info.active) {
-                        return;
-                    }
-
-                    if (pivot < info.wcc_pivot) {
-                        info.wcc_pivot = pivot;
-                        next_prop_list.push_back(vtx);
-                    }
-                };
-
-                for (auto desc : info.out) {
-                    p_vertex_map->async_visit(desc, pivot_carrier, info.wcc_pivot);
-                }
-
-                for (auto actr : info.in) {
-                    p_vertex_map->async_visit(actr, pivot_carrier, info.wcc_pivot);
-                }
-            });
-        }
-
-        world.barrier();
-        total_visits_next_iter = ygm::sum(next_prop_list.size(), world);
-
-        world.cout0() << total_visits_next_iter << ", ";
-
-        cur_prop_list.clear();
-        cur_prop_list.swap(next_prop_list);
-    }
-
-    cur_prop_list.clear();
-    next_prop_list.clear();
-
-    world.cout0() << std::endl;
 
     world.barrier();
+
+    YGM_ASSERT_RELEASE(workqueue.size() == 0);
 }
 
 
